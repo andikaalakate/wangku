@@ -3,7 +3,7 @@ import BottomNav from '@/components/BottomNav.vue'
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground pb-20">
+  <div class="min-h-dvh bg-background text-foreground pb-20">
     <RouterView />
     <BottomNav />
   </div>

@@ -66,7 +66,7 @@ export async function sendChatMessage(text: string, conversationId: string): Pro
             ?? data.answer
         if (reply) return String(reply)
 
-        return `Response tidak dikenali: ${JSON.stringify(data)}`
+        return `API Key salah atau terjadi kesalahan.`
     } catch (e: any) {
         if (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')) {
             return 'Gagal terhubung ke server TerMai. Pastikan API Key valid dan koneksi internet stabil.'
