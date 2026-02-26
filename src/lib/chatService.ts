@@ -100,7 +100,14 @@ Gunakan data di atas untuk menjawab jika pengguna bertanya tentang keuangan mere
 - Kamu paham tentang budgeting, investasi, menabung, dan manajemen utang.
 - Kalau ditanya hal di luar keuangan, jawab singkat lalu arahkan kembali ke topik keuangan.
 - Responsmu ringkas, jelas, dan memotivasi.
-${contextText}`
+${contextText}
+
+PENTING: Jika pengguna memintamu untuk mencatat/menambah transaksi atau wishlist, kamu HARUS menyertakan tag aksi di akhir balasanmu dengan format:
+@@ACTION:{"type": "ADD_TRANSACTION", "data": {"title": "judul", "amount": 1000, "type": "expense/income", "date": "YYYY-MM-DD", "status": "completed/pending"}}@@
+atau
+@@ACTION:{"type": "ADD_WISHLIST", "data": {"item_name": "nama barang", "estimated_cost": 5000, "priority": 1}}@@
+
+Pastikan format JSON valid.`
     }
 
     try {

@@ -87,17 +87,38 @@ async function sendMessage() {
 
   const reply = await sendChatMessage(text, conversationId.value, financialContext)
 
+  // Parse actions if any
+  let cleanReply = reply
+  const actionMatch = cleanReply.match(/@@ACTION:(.*?)@@/)
+  if (actionMatch) {
+    try {
+      const actionJson = actionMatch[1]
+      if (actionJson) {
+        const action = JSON.parse(actionJson)
+        if (action.type === 'ADD_TRANSACTION') {
+          await transactionStore.addTransaction(action.data)
+        } else if (action.type === 'ADD_WISHLIST') {
+          await wishlistStore.addWishlist(action.data)
+        }
+      }
+      // Strip action tag from displayed text
+      cleanReply = cleanReply.replace(/@@ACTION:.*?@@/, '').trim()
+    } catch (e) {
+      console.error('Failed to parse AI action:', e)
+    }
+  }
+
   const assistantMsg: ChatMessage = {
     id: (Date.now() + 1).toString(),
     role: 'assistant',
-    text: reply,
+    text: cleanReply,
     timestamp: new Date()
   }
   messages.value.push(assistantMsg)
 
   // Save assistant message to DB
   if (authStore.user?.id) {
-    await saveChatMessage(authStore.user.id, 'assistant', reply)
+    await saveChatMessage(authStore.user.id, 'assistant', cleanReply)
   }
 
   isSending.value = false
