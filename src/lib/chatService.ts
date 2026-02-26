@@ -65,6 +65,7 @@ export async function resetChatSession(conversationId: string): Promise<boolean>
 export async function sendChatMessage(text: string, conversationId: string, financialContext?: {
     balance: number,
     upcomingTransactions: any[],
+    recentTransactions: any[],
     wishlists: any[]
 }): Promise<string> {
     const settingsStore = useSettingsStore()
@@ -80,9 +81,13 @@ export async function sendChatMessage(text: string, conversationId: string, fina
 
     let contextText = ''
     if (financialContext) {
-        const txText = financialContext.upcomingTransactions.length > 0
+        const txUpcomingText = financialContext.upcomingTransactions.length > 0
             ? financialContext.upcomingTransactions.map(t => `- ${t.title} (${t.type}): Rp${Number(t.amount).toLocaleString('id-ID')} pada ${new Date(t.date).toLocaleDateString('id-ID')}`).join('\n')
             : 'Tidak ada transaksi mendatang.'
+
+        const txRecentText = financialContext.recentTransactions.length > 0
+            ? financialContext.recentTransactions.map(t => `- ${t.title} (${t.type}): Rp${Number(t.amount).toLocaleString('id-ID')} (${new Date(t.date).toLocaleDateString('id-ID')})`).join('\n')
+            : 'Belum ada transaksi tercatat.'
 
         const wlText = financialContext.wishlists.length > 0
             ? financialContext.wishlists.map(w => `- ${w.item_name}: Rp${Number(w.estimated_cost).toLocaleString('id-ID')}`).join('\n')
@@ -91,8 +96,10 @@ export async function sendChatMessage(text: string, conversationId: string, fina
         contextText = `
 Data Keuangan Pengguna Saat Ini:
 - Saldo: Rp${financialContext.balance.toLocaleString('id-ID')}
-- Transaksi Mendatang:
-${txText}
+- Transaksi Terakhir (Sudah Terjadi):
+${txRecentText}
+- Transaksi Mendatang (Pending):
+${txUpcomingText}
 - Wishlist:
 ${wlText}
 
@@ -102,12 +109,12 @@ Gunakan data di atas untuk menjawab jika pengguna bertanya tentang keuangan mere
     const body = {
         text,
         id: conversationId,
-        fullainame: 'WangKu Assistant',
+        fullainame: 'WangKu AI',
         nickainame: 'Wangi',
         senderName,
         ownerName: senderName,
-        date: new Date(),
-        role: 'Asisten Keuangan Pribadi',
+        date: new Date().toISOString().split('T')[0], // Use ISO date for stability
+        role: 'Asisten Keuangan',
         msgtype: 'text',
         custom_profile: `- Namamu adalah Wangi, asisten keuangan pintar dari aplikasi WangKu.
 - Kamu membantu pengguna bernama ${senderName} untuk merencanakan keuangan, menganalisis pengeluaran, dan memberi saran finansial.
@@ -115,23 +122,23 @@ Gunakan data di atas untuk menjawab jika pengguna bertanya tentang keuangan mere
 - Kamu paham tentang budgeting, investasi, menabung, dan manajemen utang.
 - Kalau ditanya hal di luar keuangan, jawab singkat lalu arahkan kembali ke topik keuangan.
 - Responsmu ringkas, jelas, dan memotivasi.
+
 ${contextText}
 
-STRUKTUR PENTING: Jika pengguna memintamu untuk mencatat/menambah transaksi atau wishlist, kamu HARUS menyertakan tag aksi di AKHIR balasanmu (dipisah satu baris kosong).
-Format tag aksi HARUS TEPAT seperti ini:
-@@ACTION:{"type": "ADD_TRANSACTION", "data": {"title": "judul", "amount": 1234, "type": "expense", "date": "YYYY-MM-DD", "status": "completed"}}@@
+### MANDATORY ACTION RULES ###
+If the user asks to record/add/save a transaction or wishlist, you MUST append a tag at the very END of your response.
+Format:
+@@ACTION:{"type": "ADD_TRANSACTION", "data": {"title": "...", "amount": 0, "type": "income", "date": "YYYY-MM-DD", "status": "completed"}}@@
+OR
+@@ACTION:{"type": "ADD_WISHLIST", "data": {"item_name": "...", "estimated_cost": 0, "priority": 1}}@@
 
-Keterangan field data:
-- title: string
-- amount: number
-- type: "income" atau "expense"
-- date: string (format YYYY-MM-DD)
-- status: "completed" (default) atau "pending"
+Rules for Fields:
+- "type" for transaction: MUST be "income" (for pemasukan/pendapatan) or "expense" (for pengeluaran/biaya). DO NOT use Indonesian.
+- "date": MUST be YYYY-MM-DD.
+- "status": use "completed" if it already happened, "pending" if it hasn't.
+- Amount: Use numbers ONLY.
 
-Atau untuk wishlist:
-@@ACTION:{"type": "ADD_WISHLIST", "data": {"item_name": "nama barang", "estimated_cost": 5000, "priority": 1}}@@
-
-Pastikan JSON di dalam tag @@ACTION:...@@ valid dan tidak ada teks tambahan di dalam tag tersebut.`
+DO NOT forget the @@ACTION:...@@ tag if the user wants to record sesuatu. Ini penting untuk aplikasi.`
     }
 
     try {
@@ -142,24 +149,31 @@ Pastikan JSON di dalam tag @@ACTION:...@@ valid dan tidak ada teks tambahan di d
         })
 
         const data = await res.json()
+        console.log('TerMai Response:', data)
 
-        // Try all possible response fields
-        if (!data.status && data.status !== true) {
+        if (data.status !== true) {
             return `Gagal: ${data.msg || data.message || data.error || JSON.stringify(data)}`
         }
 
-        // API returns { status: true, data: { msg: '...', energy: '...' } }
+        // Broad search for reply content
         const reply = data.data?.msg
-            ?? data.result
-            ?? data.reply
-            ?? data.text
-            ?? data.message
+            ?? data.data?.text
+            ?? data.data?.content
             ?? data.msg
-            ?? data.content
-            ?? data.answer
+            ?? data.text
+            ?? data.reply
+            ?? data.message
+            ?? data.result
+            ?? (Object.keys(data.data || {}).length === 0 ? null : JSON.stringify(data.data))
+
         if (reply) return String(reply)
 
-        return `API Key salah atau terjadi kesalahan.`
+        if (data.status === true && (Object.keys(data.data || {}).length === 0)) {
+            // If data is empty but status is true, it might be a transient error or session issue
+            return "Wangi sedang berpikir, tapi tidak ada jawaban. Coba klik tombol Reset di pojok kanan atas layar chat ya."
+        }
+
+        return `Terjadi kesalahan respon dari AI: ${JSON.stringify(data)}`
     } catch (e: any) {
         if (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')) {
             return 'Gagal terhubung ke server TerMai. Pastikan API Key valid dan koneksi internet stabil.'

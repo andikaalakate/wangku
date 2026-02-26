@@ -74,6 +74,13 @@ async function sendMessage() {
 
   isSending.value = true
   
+  // 0. Refresh data before sending for real-time accuracy
+  await Promise.all([
+    profileStore.fetchProfile(),
+    transactionStore.fetchTransactions(),
+    wishlistStore.fetchWishlists()
+  ])
+
   // Save user message to DB
   if (authStore.user?.id) {
     await saveChatMessage(authStore.user.id, 'user', text)
@@ -83,36 +90,75 @@ async function sendMessage() {
   const financialContext = {
     balance: profileStore.balance || 0,
     upcomingTransactions: transactionStore.transactions.filter(t => t.status === 'pending'),
+    recentTransactions: transactionStore.transactions
+      .filter(t => t.status === 'completed')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5),
     wishlists: wishlistStore.wishlists.filter(w => w.status === 'pending')
   }
 
   const reply = await sendChatMessage(text, conversationId.value, financialContext)
+  console.log('AI Reply:', reply)
 
   // Parse actions if any (more robust regex for tags across lines)
   let cleanReply = reply
   const actionMatch = cleanReply.match(/@@ACTION:\s*(\{[\s\S]*?\})\s*@@/)
+  
   if (actionMatch) {
+    console.log('Action found:', actionMatch[1])
     try {
       const actionJson = actionMatch[1]
       if (actionJson) {
         const action = JSON.parse(actionJson)
+        console.log('Parsed Action:', action)
+
         if (action.type === 'ADD_TRANSACTION') {
           // Process amount if it comes as string
           if (typeof action.data.amount === 'string') {
             action.data.amount = parseFloat(action.data.amount.replace(/[^\d.]/g, ''))
           }
+          console.log('Adding Transaction:', action.data)
           await transactionStore.addTransaction(action.data)
+          
+          if (transactionStore.error) {
+            throw new Error(transactionStore.error)
+          }
+
+          messages.value.push({
+            id: 'sys-' + Date.now(),
+            role: 'assistant',
+            text: `✅ _Transaksi **${action.data.title}** berhasil dicatat._`,
+            timestamp: new Date()
+          })
         } else if (action.type === 'ADD_WISHLIST') {
           if (typeof action.data.estimated_cost === 'string') {
             action.data.estimated_cost = parseFloat(action.data.estimated_cost.replace(/[^\d.]/g, ''))
           }
+          console.log('Adding Wishlist:', action.data)
           await wishlistStore.addWishlist(action.data)
+          
+          if (wishlistStore.error) {
+            throw new Error(wishlistStore.error)
+          }
+
+          messages.value.push({
+            id: 'sys-' + Date.now(),
+            role: 'assistant',
+            text: `✅ _Wishlist **${action.data.item_name}** berhasil ditambahkan._`,
+            timestamp: new Date()
+          })
         }
       }
       // Strip action tag from displayed text
       cleanReply = cleanReply.replace(/@@ACTION:[\s\S]*?@@/, '').trim()
-    } catch (e) {
-      console.error('Failed to parse AI action:', e)
+    } catch (e: any) {
+      console.error('Failed to parse or execute AI action:', e)
+      messages.value.push({
+        id: 'err-' + Date.now(),
+        role: 'assistant',
+        text: `❌ _Maaf, gagal memproses permintaan otomatis: ${e.message}_`,
+        timestamp: new Date()
+      })
     }
   }
 
