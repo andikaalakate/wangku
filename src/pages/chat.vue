@@ -3,11 +3,15 @@ import { ref, nextTick, onMounted, computed } from 'vue'
 import { useSettingsStore } from '@/store/settings'
 import { useProfileStore } from '@/store/profile'
 import { useAuthStore } from '@/store/auth'
+import { useTransactionStore } from '@/store/transaction'
+import { useWishlistStore } from '@/store/wishlist'
 import { sendChatMessage, fetchChatHistory, saveChatMessage, type ChatMessage } from '@/lib/chatService'
 
 const settingsStore = useSettingsStore()
 const profileStore = useProfileStore()
 const authStore = useAuthStore()
+const transactionStore = useTransactionStore()
+const wishlistStore = useWishlistStore()
 
 const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
@@ -24,7 +28,11 @@ function scrollToBottom() {
 }
 
 onMounted(async () => {
-  await profileStore.fetchProfile()
+  await Promise.all([
+    profileStore.fetchProfile(),
+    transactionStore.fetchTransactions(),
+    wishlistStore.fetchWishlists()
+  ])
   
   // Fetch chat history if user is logged in
   if (authStore.user?.id) {
@@ -70,7 +78,14 @@ async function sendMessage() {
     await saveChatMessage(authStore.user.id, 'user', text)
   }
 
-  const reply = await sendChatMessage(text, conversationId.value)
+  // Prepare financial context
+  const financialContext = {
+    balance: profileStore.balance || 0,
+    upcomingTransactions: transactionStore.transactions.filter(t => t.status === 'pending'),
+    wishlists: wishlistStore.wishlists.filter(w => w.status === 'pending')
+  }
+
+  const reply = await sendChatMessage(text, conversationId.value, financialContext)
 
   const assistantMsg: ChatMessage = {
     id: (Date.now() + 1).toString(),
