@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase'
 import { useSettingsStore } from '@/store/settings'
 import { useProfileStore } from '@/store/profile'
 import { useAuthStore } from '@/store/auth'
@@ -10,6 +11,41 @@ export interface ChatMessage {
 }
 
 const TERMAI_URL = 'https://api.termai.cc'
+
+export async function fetchChatHistory(userId: string): Promise<ChatMessage[]> {
+    const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: true })
+
+    if (error) {
+        console.error('Error fetching chat history:', error)
+        return []
+    }
+
+    return data.map(m => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        timestamp: new Date(m.timestamp)
+    }))
+}
+
+export async function saveChatMessage(userId: string, role: 'user' | 'assistant', text: string): Promise<void> {
+    const { error } = await supabase
+        .from('chat_messages')
+        .insert({
+            user_id: userId,
+            role,
+            text,
+            timestamp: new Date().toISOString()
+        })
+
+    if (error) {
+        console.error('Error saving chat message:', error)
+    }
+}
 
 export async function sendChatMessage(text: string, conversationId: string): Promise<string> {
     const settingsStore = useSettingsStore()

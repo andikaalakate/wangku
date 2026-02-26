@@ -3,7 +3,7 @@ import { ref, nextTick, onMounted, computed } from 'vue'
 import { useSettingsStore } from '@/store/settings'
 import { useProfileStore } from '@/store/profile'
 import { useAuthStore } from '@/store/auth'
-import { sendChatMessage, type ChatMessage } from '@/lib/chatService'
+import { sendChatMessage, fetchChatHistory, saveChatMessage, type ChatMessage } from '@/lib/chatService'
 
 const settingsStore = useSettingsStore()
 const profileStore = useProfileStore()
@@ -25,17 +25,28 @@ function scrollToBottom() {
 
 onMounted(async () => {
   await profileStore.fetchProfile()
+  
+  // Fetch chat history if user is logged in
+  if (authStore.user?.id) {
+    const history = await fetchChatHistory(authStore.user.id)
+    if (history.length > 0) {
+      messages.value = history
+    } else {
+      // Welcome message only if no history
+      messages.value.push({
+        id: 'welcome',
+        role: 'assistant',
+        text: `Halo ${profileStore.name || 'kamu'}! 👋 Aku **Wangi**, asisten keuangan pribadimu di WangKu. Mau tanya apa seputar keuanganmu hari ini?`,
+        timestamp: new Date()
+      })
+    }
+  }
+
   // delay to ensure UI is rendered before scrolling
   setTimeout(() => {
     window.scrollTo(0, 0)
+    scrollToBottom()
   }, 100)
-  // Welcome message
-  messages.value.push({
-    id: 'welcome',
-    role: 'assistant',
-    text: `Halo ${profileStore.name || 'kamu'}! 👋 Aku **Wangi**, asisten keuangan pribadimu di WangKu. Mau tanya apa seputar keuanganmu hari ini?`,
-    timestamp: new Date()
-  })
 })
 
 async function sendMessage() {
@@ -53,14 +64,27 @@ async function sendMessage() {
   scrollToBottom()
 
   isSending.value = true
+  
+  // Save user message to DB
+  if (authStore.user?.id) {
+    await saveChatMessage(authStore.user.id, 'user', text)
+  }
+
   const reply = await sendChatMessage(text, conversationId.value)
 
-  messages.value.push({
+  const assistantMsg: ChatMessage = {
     id: (Date.now() + 1).toString(),
     role: 'assistant',
     text: reply,
     timestamp: new Date()
-  })
+  }
+  messages.value.push(assistantMsg)
+
+  // Save assistant message to DB
+  if (authStore.user?.id) {
+    await saveChatMessage(authStore.user.id, 'assistant', reply)
+  }
+
   isSending.value = false
   scrollToBottom()
 }

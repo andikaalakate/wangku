@@ -84,4 +84,18 @@ $$ LANGUAGE plpgsql;
 -- Trigger to run the function
 CREATE TRIGGER on_transaction_change
 AFTER INSERT OR UPDATE OR DELETE ON transactions
-FOR EACH ROW EXECUTE FUNCTION update_profile_balance();
+
+-- Chat Messages
+CREATE TABLE chat_messages (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  role TEXT CHECK (role IN ('user', 'assistant')),
+  text TEXT NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own chat messages" ON chat_messages FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own chat messages" ON chat_messages FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own chat messages" ON chat_messages FOR DELETE USING (auth.uid() = user_id);
