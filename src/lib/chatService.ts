@@ -47,6 +47,21 @@ export async function saveChatMessage(userId: string, role: 'user' | 'assistant'
     }
 }
 
+export async function resetChatSession(conversationId: string): Promise<boolean> {
+    const settingsStore = useSettingsStore()
+    const apiKey = settingsStore.termaiApiKey
+    if (!apiKey) return false
+
+    try {
+        const res = await fetch(`${TERMAI_URL}/api/chat/logic-bell/reset?id=${conversationId}&key=${apiKey}`)
+        const data = await res.json()
+        return data.status === true
+    } catch (e) {
+        console.error('Error resetting chat:', e)
+        return false
+    }
+}
+
 export async function sendChatMessage(text: string, conversationId: string, financialContext?: {
     balance: number,
     upcomingTransactions: any[],
@@ -102,12 +117,21 @@ Gunakan data di atas untuk menjawab jika pengguna bertanya tentang keuangan mere
 - Responsmu ringkas, jelas, dan memotivasi.
 ${contextText}
 
-PENTING: Jika pengguna memintamu untuk mencatat/menambah transaksi atau wishlist, kamu HARUS menyertakan tag aksi di akhir balasanmu dengan format:
-@@ACTION:{"type": "ADD_TRANSACTION", "data": {"title": "judul", "amount": 1000, "type": "expense/income", "date": "YYYY-MM-DD", "status": "completed/pending"}}@@
-atau
+STRUKTUR PENTING: Jika pengguna memintamu untuk mencatat/menambah transaksi atau wishlist, kamu HARUS menyertakan tag aksi di AKHIR balasanmu (dipisah satu baris kosong).
+Format tag aksi HARUS TEPAT seperti ini:
+@@ACTION:{"type": "ADD_TRANSACTION", "data": {"title": "judul", "amount": 1234, "type": "expense", "date": "YYYY-MM-DD", "status": "completed"}}@@
+
+Keterangan field data:
+- title: string
+- amount: number
+- type: "income" atau "expense"
+- date: string (format YYYY-MM-DD)
+- status: "completed" (default) atau "pending"
+
+Atau untuk wishlist:
 @@ACTION:{"type": "ADD_WISHLIST", "data": {"item_name": "nama barang", "estimated_cost": 5000, "priority": 1}}@@
 
-Pastikan format JSON valid.`
+Pastikan JSON di dalam tag @@ACTION:...@@ valid dan tidak ada teks tambahan di dalam tag tersebut.`
     }
 
     try {

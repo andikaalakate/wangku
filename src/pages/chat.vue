@@ -5,7 +5,8 @@ import { useProfileStore } from '@/store/profile'
 import { useAuthStore } from '@/store/auth'
 import { useTransactionStore } from '@/store/transaction'
 import { useWishlistStore } from '@/store/wishlist'
-import { sendChatMessage, fetchChatHistory, saveChatMessage, type ChatMessage } from '@/lib/chatService'
+import { supabase } from '@/lib/supabase'
+import { sendChatMessage, fetchChatHistory, saveChatMessage, resetChatSession, type ChatMessage } from '@/lib/chatService'
 
 const settingsStore = useSettingsStore()
 const profileStore = useProfileStore()
@@ -87,22 +88,29 @@ async function sendMessage() {
 
   const reply = await sendChatMessage(text, conversationId.value, financialContext)
 
-  // Parse actions if any
+  // Parse actions if any (more robust regex for tags across lines)
   let cleanReply = reply
-  const actionMatch = cleanReply.match(/@@ACTION:(.*?)@@/)
+  const actionMatch = cleanReply.match(/@@ACTION:\s*(\{[\s\S]*?\})\s*@@/)
   if (actionMatch) {
     try {
       const actionJson = actionMatch[1]
       if (actionJson) {
         const action = JSON.parse(actionJson)
         if (action.type === 'ADD_TRANSACTION') {
+          // Process amount if it comes as string
+          if (typeof action.data.amount === 'string') {
+            action.data.amount = parseFloat(action.data.amount.replace(/[^\d.]/g, ''))
+          }
           await transactionStore.addTransaction(action.data)
         } else if (action.type === 'ADD_WISHLIST') {
+          if (typeof action.data.estimated_cost === 'string') {
+            action.data.estimated_cost = parseFloat(action.data.estimated_cost.replace(/[^\d.]/g, ''))
+          }
           await wishlistStore.addWishlist(action.data)
         }
       }
       // Strip action tag from displayed text
-      cleanReply = cleanReply.replace(/@@ACTION:.*?@@/, '').trim()
+      cleanReply = cleanReply.replace(/@@ACTION:[\s\S]*?@@/, '').trim()
     } catch (e) {
       console.error('Failed to parse AI action:', e)
     }
@@ -125,6 +133,37 @@ async function sendMessage() {
   scrollToBottom()
 }
 
+async function resetChat() {
+  if (!confirm('Hapus semua percakapan dan reset asisten?')) return
+  
+  isSending.value = true
+  try {
+    // 1. Reset TerMai Session
+    await resetChatSession(conversationId.value)
+    
+    // 2. Clear Supabase History
+    if (authStore.user?.id) {
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', authStore.user.id)
+    }
+    
+    // 3. Reset Local State
+    messages.value = []
+    messages.value.push({
+      id: 'welcome',
+      role: 'assistant',
+      text: `Halo ${profileStore.name || 'kamu'}! 👋 Aku **Wangi**, asisten keuangan pribadimu di WangKu. Percakapan telah direset. Mau tanya apa hari ini?`,
+      timestamp: new Date()
+    })
+  } catch (e) {
+    console.error('Failed to reset chat:', e)
+  } finally {
+    isSending.value = false
+  }
+}
+
 function formatTime(d: Date) {
   return new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
@@ -137,10 +176,17 @@ function formatTime(d: Date) {
       <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
         <i class="bx bx-bot text-xl text-primary-foreground"></i>
       </div>
-      <div>
+      <div class="flex-1">
         <p class="font-semibold text-sm">Wangi</p>
         <p class="text-xs text-muted-foreground">Asisten Keuangan WangKu</p>
       </div>
+      <button 
+        @click="resetChat"
+        title="Reset Percakapan"
+        class="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors"
+      >
+        <i class="bx bx-refresh text-xl"></i>
+      </button>
     </header>
 
     <!-- No API Key Warning -->
