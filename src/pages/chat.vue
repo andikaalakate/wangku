@@ -25,6 +25,10 @@ function scrollToBottom() {
 
 onMounted(async () => {
   await profileStore.fetchProfile()
+  // delay to ensure UI is rendered before scrolling
+  setTimeout(() => {
+    window.scrollTo(0, 0)
+  }, 100)
   // Welcome message
   messages.value.push({
     id: 'welcome',
@@ -67,9 +71,9 @@ function formatTime(d: Date) {
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100dvh-3.5rem)] bg-background text-foreground">
+  <div class="flex flex-col h-dvh bg-background text-foreground">
     <!-- Header -->
-    <header class="flex fixed top-0 left-0 right-0 z-50 items-center gap-3 px-4 py-3 border-b bg-card shadow-sm flex-shrink-0">
+    <header class="flex fixed top-0 left-0 right-0 items-center gap-3 px-4 py-3 border-b bg-card shadow-sm flex-shrink-0">
       <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
         <i class="bx bx-bot text-xl text-primary-foreground"></i>
       </div>
@@ -80,16 +84,16 @@ function formatTime(d: Date) {
     </header>
 
     <!-- No API Key Warning -->
-    <div v-if="!settingsStore.termaiApiKey" class="mx-4 mt-26 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm flex gap-2">
-      <i class="bx bx-error-circle text-xl flex-shrink-0 mt-0.5"></i>
-      <div>
-        <p class="font-medium">TerMai API Key belum diisi</p>
-        <p class="text-xs mt-0.5">Pergi ke <a href="/profile" class="underline font-medium">Profile</a> → AI Chat untuk mengisi API Key dari <strong>api.termai.cc</strong>.</p>
-      </div>
-    </div>
 
     <!-- Messages -->
-    <div :class="!settingsStore.termaiApiKey ? 'pt-4' : 'pt-26'" class="flex-1 overflow-y-auto px-4 pb-8 space-y-4" style="overscroll-behavior: contain;">
+    <div :class="!settingsStore.termaiApiKey ? 'pt-4' : 'pt-20'" class="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32" style="overscroll-behavior: contain;">
+      <div v-if="!settingsStore.termaiApiKey" class="mx-4 mt-16 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm flex gap-2">
+        <i class="bx bx-error-circle text-xl flex-shrink-0 mt-0.5"></i>
+        <div>
+          <p class="font-medium">TerMai API Key belum diisi</p>
+          <p class="text-xs mt-0.5">Pergi ke <a href="/profile" class="underline font-medium">Profile</a> → AI Chat untuk mengisi API Key dari <strong>api.termai.cc</strong>.</p>
+        </div>
+      </div>
       <div v-for="msg in messages" :key="msg.id" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
         <!-- Assistant avatar -->
         <div v-if="msg.role === 'assistant'" class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mr-2 mt-1">
@@ -129,7 +133,7 @@ function formatTime(d: Date) {
     </div>
 
     <!-- Input Bar -->
-    <div class="fixed bottom-13 left-0 right-0 z-50 flex-shrink-0 border-t bg-card px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div class="flex-shrink-0 fixed bottom-17 left-0 right-0 border-t bg-card px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <form @submit.prevent="sendMessage" class="flex items-center gap-2">
         <input
           v-model="inputText"

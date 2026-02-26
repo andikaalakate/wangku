@@ -8,6 +8,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import StatCard from '@/components/ui/StatCard.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
@@ -16,6 +19,7 @@ const router = useRouter()
 
 const editingName = ref('')
 const saving = ref(false)
+const showLogoutConfirm = ref(false)
 
 onMounted(async () => {
   await profileStore.fetchProfile()
@@ -35,79 +39,121 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="p-6 pb-24">
-    <header class="mb-6">
-      <h1 class="text-2xl font-bold">Profile</h1>
-      <p class="text-muted-foreground text-sm">Manage your account and app settings</p>
-    </header>
+  <div class="p-6 pb-4">
+    <ConfirmDialog 
+      :show="showLogoutConfirm"
+      title="Keluar Akun?"
+      message="Apakah kamu yakin ingin keluar dari akun WangKu?"
+      confirm-text="Keluar"
+      variant="destructive"
+      icon="bx-log-out"
+      @confirm="handleLogout"
+      @cancel="showLogoutConfirm = false"
+    />
+
+    <PageHeader 
+      title="Profil" 
+      description="Kelola akun dan pengaturan aplikasi"
+    />
 
     <div class="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg">Account Info</CardTitle>
+      <!-- Balance Quick View -->
+      <StatCard 
+        label="Saldo Saat Ini" 
+        :value="profileStore.balance" 
+        :loading="profileStore.loading"
+        variant="primary"
+      />
+
+      <Card class="rounded-2xl border-none shadow-sm bg-card/60 backdrop-blur-sm">
+        <CardHeader class="pb-3">
+          <CardTitle class="text-base font-bold">Informasi Akun</CardTitle>
         </CardHeader>
-        <CardContent class="space-y-4">
-          <div>
-            <Label class="text-muted-foreground">Email</Label>
-            <p class="font-medium mt-1">{{ authStore.user?.email || 'Guest' }}</p>
-          </div>
-          <div class="space-y-2">
-            <Label for="name">Nama Tampilan</Label>
-            <div class="flex gap-2">
-              <Input id="name" v-model="editingName" placeholder="Nama kamu..." @keyup.enter="saveName" />
-              <Button @click="saveName" :disabled="saving" size="sm">
-                <i class="bx" :class="saving ? 'bx-loader-alt animate-spin' : 'bx-check'"></i>
-              </Button>
+        <CardContent class="space-y-5">
+          <div class="space-y-1.5 px-0.5">
+            <Label class="text-[10px] font-bold uppercase text-muted-foreground ml-1">Email</Label>
+            <div class="p-3 rounded-xl bg-muted/40 border text-sm font-medium">
+              {{ authStore.user?.email || 'Guest' }}
             </div>
           </div>
-          <div>
-            <Label class="text-muted-foreground">Saldo Terkini</Label>
-            <p class="font-bold text-primary text-xl mt-1">Rp{{ profileStore.balance.toLocaleString('id-ID') }}</p>
-            <p class="text-xs text-muted-foreground">Edit saldo langsung dari halaman Beranda.</p>
+          
+          <div class="space-y-1.5 px-0.5">
+            <Label for="name" class="text-[10px] font-bold uppercase text-muted-foreground ml-1">Nama Tampilan</Label>
+            <div class="relative group">
+              <Input 
+                id="name" 
+                v-model="editingName" 
+                placeholder="Nama kamu..." 
+                @keyup.enter="saveName" 
+                class="h-12 rounded-xl border-muted/60 focus-visible:ring-primary/30 pr-14 font-medium"
+              />
+              <button 
+                @click="saveName" 
+                :disabled="saving"
+                class="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+              >
+                <i class="bx text-xl" :class="saving ? 'bx-loader-alt animate-spin' : 'bx-check'"></i>
+              </button>
+            </div>
           </div>
-          <Button variant="destructive" @click="handleLogout" class="w-full">
-            <i class="bx bx-log-out mr-2 text-lg"></i>
-            Log Out
+
+          <Button 
+            variant="ghost" 
+            @click="showLogoutConfirm = true" 
+            class="w-full h-11 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/5 font-bold text-sm gap-2"
+          >
+            <i class="bx bx-log-out text-lg"></i>
+            Keluar Akun
           </Button>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg flex items-center gap-2">
+      <Card class="rounded-2xl border-none shadow-sm bg-card/60 backdrop-blur-sm">
+        <CardHeader class="pb-3">
+          <CardTitle class="text-base font-bold flex items-center gap-2">
             <i class="bx bx-bot text-primary"></i>
-            AI Configuration
+            Konfigurasi AI
           </CardTitle>
         </CardHeader>
-        <CardContent class="space-y-4">
-          <p class="text-sm text-muted-foreground">
-            WangKu uses Google Gemini for the AI Summary, and TerMai for the AI Chat feature.
+        <CardContent class="space-y-5">
+          <p class="text-xs text-muted-foreground leading-relaxed">
+            WangKu menggunakan <span class="text-foreground font-medium">Google Gemini</span> untuk Ringkasan AI, dan <span class="text-foreground font-medium">TerMai</span> untuk fitur AI Chat.
           </p>
-          <div class="space-y-2">
-            <Label for="apiKey">Gemini API Key <span class="text-muted-foreground">(AI Summary)</span></Label>
+          
+          <div class="space-y-1.5 px-0.5">
+            <Label for="apiKey" class="text-[10px] font-bold uppercase text-muted-foreground ml-1">Gemini API Key</Label>
             <Input 
               id="apiKey" 
               type="password" 
               placeholder="AIzaSy..." 
               v-model="settingsStore.geminiApiKey"
+              class="h-11 rounded-xl border-muted/60 focus-visible:ring-primary/30 text-sm"
             />
           </div>
-          <div class="space-y-2">
-            <Label for="termaiKey">TerMai API Key <span class="text-muted-foreground">(AI Chat)</span></Label>
+          
+          <div class="space-y-1.5 px-0.5">
+            <Label for="termaiKey" class="text-[10px] font-bold uppercase text-muted-foreground ml-1">TerMai API Key</Label>
             <Input 
               id="termaiKey" 
               type="password" 
               placeholder="Key dari api.termai.cc..." 
               v-model="settingsStore.termaiApiKey"
+              class="h-11 rounded-xl border-muted/60 focus-visible:ring-primary/30 text-sm"
             />
           </div>
-          <p class="text-[10px] text-muted-foreground">Keys disimpan di browser lokal kamu, tidak dikirim ke server kami.</p>
+          
+          <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
+            <i class="bx bx-info-circle text-amber-500 text-lg mt-0.5"></i>
+            <p class="text-[10px] text-amber-700 font-medium leading-normal">
+              Keys disimpan di browser lokal kamu secara aman dan tidak pernah dikirim ke server backend kami.
+            </p>
+          </div>
         </CardContent>
       </Card>
       
-      <div class="text-center text-xs text-muted-foreground pt-4">
-        WangKu App &copy; 2026<br/>
-        Built with Vite, Vue 3, and Supabase
+      <div class="text-center space-y-1 pt-4 opacity-40">
+        <p class="text-[10px] font-bold tracking-widest uppercase">WangKu App &copy; 2026</p>
+        <p class="text-[9px] font-medium">Crafted with Vue 3, Supabase & Tailwind</p>
       </div>
     </div>
   </div>

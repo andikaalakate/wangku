@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useAuthStore } from '@/store/auth'
+import { onMounted, ref, computed } from 'vue'
 import { useTransactionStore } from '@/store/transaction'
 import { useWishlistStore } from '@/store/wishlist'
 import { useProfileStore } from '@/store/profile'
 import { generateFinancialSummary } from '@/lib/aiService'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import StatCard from '@/components/ui/StatCard.vue'
+import SectionHeader from '@/components/ui/SectionHeader.vue'
+import ListItem from '@/components/ui/ListItem.vue'
 
-const authStore = useAuthStore()
 const transactionStore = useTransactionStore()
 const wishlistStore = useWishlistStore()
 const profileStore = useProfileStore()
@@ -58,8 +60,48 @@ async function loadAiSummary(force = false) {
   isRefreshing.value = false
 }
 
-const formatTime = (d: Date) =>
-  d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })
+const now = new Date()
+const currentMonth = now.getMonth()
+const currentYear = now.getFullYear()
+
+const monthlyTransactions = computed(() => {
+  return transactionStore.transactions.filter(t => {
+    const d = new Date(t.date)
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear && t.status === 'completed'
+  })
+})
+
+const monthlyIncome = computed(() => 
+  monthlyTransactions.value.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0)
+)
+
+const monthlyExpense = computed(() => 
+  monthlyTransactions.value.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0)
+)
+
+const monthlyNet = computed(() => monthlyIncome.value - monthlyExpense.value)
+
+const recentTransactions = computed(() => {
+  return [...transactionStore.transactions]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 3)
+})
+
+const pendingBills = computed(() => {
+  return transactionStore.transactions
+    .filter(t => t.type === 'expense' && t.status === 'pending')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 2)
+})
+
+const topWishlist = computed(() => {
+  return wishlistStore.wishlists
+    .filter(w => w.status !== 'completed')
+    .sort((a, b) => a.priority - b.priority)[0]
+})
+
+const formatDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
 
 onMounted(async () => {
   await profileStore.fetchProfile()
@@ -71,44 +113,119 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground pb-20">
-    <header class="p-6 pb-4">
-      <h1 class="text-2xl font-bold">WangKu</h1>
-      <p class="text-muted-foreground text-sm">Halo, {{ profileStore.name || authStore.user?.email || 'Pengguna' }}!</p>
-    </header>
+  <div class="p-6 pb-4">
+    <PageHeader 
+      title="WangKu" 
+      :description="`Halo, ${profileStore.name || 'Pengguna'}!`"
+    />
 
-    <main class="px-6 flex flex-col gap-6">
-      <section class="bg-primary text-primary-foreground rounded-2xl p-6 shadow-lg relative overflow-hidden">
-        <div class="absolute right-0 top-0 opacity-10 blur-2xl">
-          <div class="w-32 h-32 bg-white rounded-full translate-x-1/2 -translate-y-1/2"></div>
+    <main class="space-y-6">
+      <!-- 4-Card Summary Grid -->
+      <div class="grid grid-cols-2 gap-3">
+        <StatCard 
+          label="Saldo Utama" 
+          :value="profileStore.balance" 
+          :loading="profileStore.loading"
+        />
+        <StatCard 
+          label="Masuk (Bln Ini)" 
+          :value="monthlyIncome" 
+          variant="primary"
+        />
+        <StatCard 
+          label="Keluar (Bln Ini)" 
+          :value="monthlyExpense" 
+          variant="destructive"
+        />
+        <StatCard 
+          label="Net (Bln Ini)" 
+          :value="monthlyNet" 
+          :variant="monthlyNet >= 0 ? 'primary' : 'destructive'"
+        />
+      </div>
+
+      <!-- Recent Transactions -->
+      <section v-if="recentTransactions.length > 0" class="space-y-3">
+        <SectionHeader title="Transaksi Terakhir" />
+        <div class="space-y-2">
+          <ListItem 
+            v-for="t in recentTransactions" 
+            :key="t.id"
+            :title="t.title"
+            :subtitle="formatDate(t.date)"
+            :amount="t.amount"
+            :type="t.type"
+          />
         </div>
-        <p class="text-sm font-medium opacity-90 mb-1">Total Saldo</p>
-        <h2 class="text-4xl font-bold tracking-tight">
-          <span v-if="profileStore.loading" class="opacity-60">...</span>
-          <span v-else>Rp{{ profileStore.balance.toLocaleString('id-ID') }}</span>
-        </h2>
-        <p v-if="profileStore.error" class="text-xs mt-2 opacity-75">⚠️ {{ profileStore.error }}</p>
       </section>
 
-      <section class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold">AI Assistant</h3>
-          <button
-            @click="loadAiSummary(true)"
-            :disabled="isRefreshing"
-            class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-          >
-            <i class="bx text-base" :class="isRefreshing ? 'bx-loader-alt animate-spin' : 'bx-refresh'"></i>
-            {{ isRefreshing ? 'Menganalisis...' : 'Perbarui' }}
-          </button>
+      <!-- Pending Bills / Upcoming -->
+      <section v-if="pendingBills.length > 0" class="space-y-3">
+        <SectionHeader title="Tagihan Mendatang" />
+        <div class="space-y-2">
+          <ListItem 
+            v-for="t in pendingBills" 
+            :key="t.id"
+            :title="t.title"
+            :subtitle="`Jatuh tempo: ${formatDate(t.date)}`"
+            :amount="t.amount"
+            type="neutral"
+            indicator-variant="amber"
+            status="pending"
+            show-status-badge
+          />
         </div>
-        <div class="bg-card border rounded-xl p-4 shadow-sm text-sm leading-relaxed text-muted-foreground">
-          <p v-html="aiSummary || 'Ketuk Perbarui untuk memulai analisis AI.'" class="mb-2"></p>
-          <p v-if="lastUpdated" class="text-[10px] opacity-50 mt-2 border-t pt-2">
-            Terakhir diperbarui: {{ formatTime(lastUpdated) }}
+      </section>
+
+      <!-- Wishlist Highlight -->
+      <section v-if="topWishlist" class="space-y-3">
+        <SectionHeader title="Target Utama" />
+        <div class="p-4 rounded-xl border bg-card space-y-2">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium">{{ topWishlist.item_name }}</p>
+            <p class="text-sm font-bold">Rp{{ Number(topWishlist.estimated_cost).toLocaleString('id-ID') }}</p>
+          </div>
+          <div class="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+            <div 
+              class="h-full bg-primary rounded-full transition-all duration-500"
+              :style="{ width: `${Math.min((profileStore.balance / Number(topWishlist.estimated_cost)) * 100, 100)}%` }"
+            ></div>
+          </div>
+          <p class="text-[10px] text-muted-foreground">
+            {{ profileStore.balance >= Number(topWishlist.estimated_cost) ? '✅ Saldo cukup' : `⚠️ Kurang Rp${(Number(topWishlist.estimated_cost) - profileStore.balance).toLocaleString('id-ID')}` }}
           </p>
         </div>
       </section>
+
+      <!-- AI Assistant -->
+      <section class="space-y-3">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-base font-semibold">AI Assistant</h3>
+          <button @click="loadAiSummary(true)" :disabled="isRefreshing" class="p-1 px-2 rounded-lg bg-secondary text-[10px] font-bold flex items-center gap-1 transition-colors hover:bg-muted">
+            <i class="bx text-xs" :class="isRefreshing ? 'bx-loader-alt animate-spin' : 'bx-refresh'"></i>
+            Perbarui
+          </button>
+        </div>
+        <div class="p-4 rounded-xl bg-card border text-sm text-muted-foreground leading-relaxed shadow-sm">
+          <p v-html="aiSummary || 'Menganalisis keuanganmu...'"></p>
+        </div>
+      </section>
+
+      <!-- Quick Links -->
+      <div class="grid grid-cols-2 gap-3">
+        <router-link to="/transactions" class="p-3 rounded-xl border flex items-center gap-3 bg-card hover:bg-muted/50 transition-all active:scale-[0.98] shadow-sm">
+          <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <i class="bx bx-list-ul text-lg"></i>
+          </div>
+          <span class="text-xs font-bold">Transaksi</span>
+        </router-link>
+        <router-link to="/wishlist" class="p-3 rounded-xl border flex items-center gap-3 bg-card hover:bg-muted/50 transition-all active:scale-[0.98] shadow-sm">
+          <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <i class="bx bx-heart text-lg"></i>
+          </div>
+          <span class="text-xs font-bold">Wishlist</span>
+        </router-link>
+      </div>
     </main>
   </div>
 </template>

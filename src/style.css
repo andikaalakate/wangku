@@ -91,3 +91,40 @@
     font-family: var(--font-sans);
   }
 }
+
+/* Bottom Sheet Transition */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.sheet-enter-active .modal-card,
+.sheet-leave-active .modal-card {
+  transition: transform 0.4s cubic-bezier(0.36, 0.66, 0.04, 1);
+}
+
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-from .modal-card,
+.sheet-leave-to .modal-card {
+  transform: translateY(100%);
+}
+
+/* Page Transition */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s ease-out;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}

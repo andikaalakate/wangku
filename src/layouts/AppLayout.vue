@@ -4,7 +4,11 @@ import BottomNav from '@/components/BottomNav.vue'
 
 <template>
   <div class="min-h-dvh bg-background text-foreground pb-20">
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <Transition name="page" mode="out-in">
+        <component :is="Component" />
+      </Transition>
+    </RouterView>
     <BottomNav />
   </div>
 </template>
